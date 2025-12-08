@@ -1,0 +1,50 @@
+# Generate Default Deny Network Policy
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-01: Restrict inbound/outbound network traffic on all resources
+# - KSI-CNA-03: Use logical networking to enforce traffic controls
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-default-deny-network-policy
+  annotations:
+    policies.kyverno.io/title: Generate Default Deny Network Policy
+    policies.kyverno.io/category: Network
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: NetworkPolicy
+    policies.kyverno.io/description: >-
+      By default, Kubernetes allows all ingress and egress traffic to and from Pods.
+      This policy generates a default-deny NetworkPolicy for every new namespace,
+      blocking all traffic unless explicitly allowed.
+      Aligns with FedRAMP 20x KSI-CNA-01 and KSI-CNA-03.
+spec:
+  rules:
+    - name: default-deny-ingress-egress
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - flux-system
+                - kyverno
+      generate:
+        synchronize: true
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-all
+        namespace: "{{request.object.metadata.name}}"
+        data:
+          spec:
+            # Select all pods in namespace
+            podSelector: {}
+            # Block all traffic by default
+            policyTypes:
+              - Ingress
+              - Egress

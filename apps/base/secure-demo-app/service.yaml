@@ -1,0 +1,23 @@
+# Secure Demo Application Service
+# FedRAMP 20x KSI Alignment:
+# - KSI-PIY-01: Proper labeling for inventory
+# - KSI-SVC-02: Internal cluster communication
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-demo-app
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: secure-demo-app
+    app.kubernetes.io/component: web
+    app.kubernetes.io/managed-by: flux
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: secure-demo-app

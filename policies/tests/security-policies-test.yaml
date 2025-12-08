@@ -1,0 +1,117 @@
+# Kyverno Policy Test Suite
+# Tests for security policies (KSI-CNA-02)
+name: security-policies-test
+policies:
+  - ../kyverno/security/disallow-privileged.yaml
+  - ../kyverno/security/require-non-root.yaml
+  - ../kyverno/security/require-ro-rootfs.yaml
+  - ../kyverno/security/require-drop-capabilities.yaml
+  - ../kyverno/security/disallow-privilege-escalation.yaml
+  - ../kyverno/security/disallow-host-namespaces.yaml
+resources:
+  - name: compliant-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: compliant-pod
+        namespace: test
+      spec:
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+        containers:
+          - name: app
+            image: nginx:1.25
+            securityContext:
+              privileged: false
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              capabilities:
+                drop:
+                  - ALL
+  - name: privileged-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: privileged-pod
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: nginx:latest
+            securityContext:
+              privileged: true
+  - name: root-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: root-pod
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: nginx:1.25
+            securityContext:
+              runAsNonRoot: false
+  - name: writable-rootfs-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: writable-pod
+        namespace: test
+      spec:
+        securityContext:
+          runAsNonRoot: true
+        containers:
+          - name: app
+            image: nginx:1.25
+            securityContext:
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+  - name: host-namespace-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: host-ns-pod
+        namespace: test
+      spec:
+        hostNetwork: true
+        hostPID: true
+        securityContext:
+          runAsNonRoot: true
+        containers:
+          - name: app
+            image: nginx:1.25
+            securityContext:
+              runAsNonRoot: true
+results:
+  - policy: disallow-privileged-containers
+    resource: compliant-pod
+    result: pass
+  - policy: disallow-privileged-containers
+    resource: privileged-pod
+    result: fail
+  - policy: require-run-as-non-root
+    resource: compliant-pod
+    result: pass
+  - policy: require-run-as-non-root
+    resource: root-pod
+    result: fail
+  - policy: require-read-only-root-filesystem
+    resource: compliant-pod
+    result: pass
+  - policy: require-read-only-root-filesystem
+    resource: writable-rootfs-pod
+    result: fail
+  - policy: disallow-host-namespaces
+    resource: compliant-pod
+    result: pass
+  - policy: disallow-host-namespaces
+    resource: host-namespace-pod
+    result: fail

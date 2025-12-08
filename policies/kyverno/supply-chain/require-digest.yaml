@@ -1,0 +1,49 @@
+# Require Image Digests (No Tags)
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-04: Implement immutable infrastructure with default restrictions
+# - KSI-SVC-05: Use cryptographic methods to validate resource integrity
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-image-digest
+  annotations:
+    policies.kyverno.io/title: Require Image Digest
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Container images must reference a specific digest (sha256) instead of
+      a mutable tag. This ensures immutable infrastructure and prevents
+      unexpected changes when tags are updated.
+      Aligns with FedRAMP 20x KSI-CNA-04 and KSI-SVC-05.
+spec:
+  validationFailureAction: Audit  # Start with Audit, move to Enforce
+  background: true
+  rules:
+    - name: require-digest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - flux-system
+                - kyverno
+      validate:
+        message: >-
+          Images must use digests (sha256) instead of tags for immutable
+          infrastructure. Use format: image@sha256:... (KSI-CNA-04, KSI-SVC-05)
+        pattern:
+          spec:
+            containers:
+              - image: "*@sha256:*"
+            =(initContainers):
+              - image: "*@sha256:*"
+            =(ephemeralContainers):
+              - image: "*@sha256:*"

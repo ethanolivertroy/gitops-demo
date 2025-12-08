@@ -1,0 +1,52 @@
+# Example: Non-Compliant Deployment
+# This deployment WILL BE BLOCKED by Kyverno policies
+#
+# Use to test policy enforcement:
+# kubectl apply -f examples/non-compliant-deployment.yaml
+#
+# Expected errors:
+# - Privileged mode disallowed (KSI-CNA-02)
+# - Must run as non-root (KSI-CNA-02)
+# - Read-only root filesystem required (KSI-CNA-02)
+# - Must drop all capabilities (KSI-CNA-02)
+# - Resource limits required (KSI-CNA-05)
+# - Latest tag disallowed (KSI-CNA-04)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: example-non-compliant
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: non-compliant-app
+  namespace: example-non-compliant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: non-compliant
+  template:
+    metadata:
+      labels:
+        app: non-compliant
+        # Missing required labels!
+    spec:
+      # VIOLATION: No security context
+      containers:
+        - name: app
+          # VIOLATION: Using 'latest' tag
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          # VIOLATION: Privileged container
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            # VIOLATION: Not read-only
+            readOnlyRootFilesystem: false
+            # VIOLATION: Running as root
+            runAsNonRoot: false
+          # VIOLATION: No resource limits
+          # VIOLATION: No probes

@@ -1,0 +1,28 @@
+# YAML Lint configuration for CI validation
+---
+extends: default
+
+rules:
+  line-length:
+    max: 150
+    level: warning
+  indentation:
+    spaces: 2
+    indent-sequences: true
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
+  document-start: disable
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+ignore: |
+  .git/
+  terraform/.terraform/
+  node_modules/
+  vendor/

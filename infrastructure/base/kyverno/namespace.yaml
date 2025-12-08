@@ -1,0 +1,12 @@
+# Kyverno Namespace
+# FedRAMP 20x KSI Alignment:
+# - KSI-AFR-09: Persistent validation of security decisions
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kyverno
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: policy-engine
+    fedramp.gov/component: security

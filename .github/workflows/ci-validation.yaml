@@ -1,0 +1,159 @@
+# CI Validation Pipeline
+# Aligns with: KSI-CMT-03 (Automate testing throughout deployment)
+#              KSI-MLA-05 (Evaluate Infrastructure as Code)
+name: CI Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  KYVERNO_VERSION: "1.11.0"
+
+jobs:
+  # Validate all YAML files are syntactically correct
+  yaml-lint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: YAML Lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: .
+          config_file: .yamllint.yaml
+          strict: false
+
+  # Validate Kubernetes manifests
+  kubernetes-validation:
+    name: Kubernetes Manifest Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubeconform
+        uses: fluxcd/flux2/action@main
+
+      - name: Validate Kubernetes manifests
+        run: |
+          # Validate all kustomization directories
+          find . -name 'kustomization.yaml' -type f | while read -r kustomization; do
+            dir=$(dirname "$kustomization")
+            echo "Validating $dir..."
+            kustomize build "$dir" | kubeconform -strict -summary
+          done
+
+  # Validate Kyverno policies against manifests
+  kyverno-validation:
+    name: Kyverno Policy Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Kyverno CLI
+        run: |
+          curl -sLO "https://github.com/kyverno/kyverno/releases/download/v${KYVERNO_VERSION}/kyverno-cli_v${KYVERNO_VERSION}_linux_x86_64.tar.gz"
+          tar -xzf kyverno-cli_v${KYVERNO_VERSION}_linux_x86_64.tar.gz
+          sudo mv kyverno /usr/local/bin/
+          kyverno version
+
+      - name: Validate policies syntax
+        run: |
+          echo "Validating Kyverno policy syntax..."
+          find policies/kyverno -name '*.yaml' -exec kyverno validate {} \;
+
+      - name: Test compliant deployment
+        run: |
+          echo "Testing compliant deployment passes policies..."
+          kyverno apply policies/kyverno/ \
+            --resource examples/compliant-deployment.yaml \
+            --detailed-results
+
+      - name: Test non-compliant deployment (expect failures)
+        run: |
+          echo "Testing non-compliant deployment is blocked..."
+          if kyverno apply policies/kyverno/ \
+            --resource examples/non-compliant-deployment.yaml \
+            --detailed-results 2>&1 | grep -q "fail"; then
+            echo "Non-compliant deployment correctly blocked"
+          else
+            echo "ERROR: Non-compliant deployment should be blocked"
+            exit 1
+          fi
+
+  # Validate Terraform configurations
+  terraform-validation:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/gke
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+  # Run Flux validation
+  flux-validation:
+    name: Flux Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flux
+        uses: fluxcd/flux2/action@main
+
+      - name: Validate Flux resources
+        run: |
+          echo "Validating Flux resources..."
+          flux check --pre
+
+          # Validate kustomization builds
+          for env in staging production; do
+            echo "Validating $env cluster..."
+            kustomize build clusters/$env/flux-system
+          done
+
+  # Summary job for branch protection
+  ci-summary:
+    name: CI Summary
+    needs:
+      - yaml-lint
+      - kubernetes-validation
+      - kyverno-validation
+      - terraform-validation
+      - flux-validation
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.yaml-lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.kubernetes-validation.result }}" == "failure" ]] || \
+             [[ "${{ needs.kyverno-validation.result }}" == "failure" ]] || \
+             [[ "${{ needs.terraform-validation.result }}" == "failure" ]] || \
+             [[ "${{ needs.flux-validation.result }}" == "failure" ]]; then
+            echo "One or more CI jobs failed"
+            exit 1
+          fi
+          echo "All CI checks passed!"

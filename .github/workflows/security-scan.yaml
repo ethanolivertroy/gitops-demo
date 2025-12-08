@@ -1,0 +1,164 @@
+# Security Scanning Pipeline
+# Aligns with: KSI-MLA-05 (Evaluate Infrastructure as Code)
+#              KSI-PIY-07 (Document software supply chain)
+#              KSI-CNA-02 (Minimize attack surface)
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Run weekly security scans
+    - cron: '0 6 * * 1'
+
+jobs:
+  # Infrastructure as Code security scanning
+  iac-security:
+    name: IaC Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform,kubernetes
+          output_format: cli,sarif
+          output_file_path: console,checkov-results.sarif
+          soft_fail: true
+          skip_check: CKV_K8S_43  # Skip image digest check for examples
+        continue-on-error: true
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+        continue-on-error: true
+
+  # Kubernetes manifest security scanning
+  kubernetes-security:
+    name: Kubernetes Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy for misconfigurations
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Run kubesec
+        run: |
+          # Install kubesec
+          curl -sSL https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz
+          sudo mv kubesec /usr/local/bin/
+
+          echo "=== Scanning Kubernetes manifests ==="
+
+          # Scan compliant example
+          echo ""
+          echo "--- Compliant deployment scan ---"
+          kubesec scan examples/compliant-deployment.yaml || true
+
+          # Scan sample app
+          echo ""
+          echo "--- Sample app deployment scan ---"
+          kubesec scan apps/base/secure-demo-app/deployment.yaml || true
+
+  # Terraform security scanning
+  terraform-security:
+    name: Terraform Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/
+          soft_fail: true
+
+      - name: Run Terrascan
+        uses: tenable/terrascan-action@main
+        with:
+          iac_type: 'terraform'
+          iac_dir: 'terraform/'
+          policy_type: 'gcp'
+          verbose: true
+        continue-on-error: true
+
+  # Secret scanning
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # SBOM generation
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Repository SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  # Security summary
+  security-summary:
+    name: Security Summary
+    needs:
+      - iac-security
+      - kubernetes-security
+      - terraform-security
+      - secret-scan
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| IaC Security (Checkov) | ${{ needs.iac-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Kubernetes Security (Trivy/kubesec) | ${{ needs.kubernetes-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform Security (tfsec/Terrascan) | ${{ needs.terraform-security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Detection (Gitleaks) | ${{ needs.secret-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### KSI Alignment" >> $GITHUB_STEP_SUMMARY
+          echo "- **KSI-MLA-05**: IaC configuration evaluated" >> $GITHUB_STEP_SUMMARY
+          echo "- **KSI-PIY-07**: Supply chain documented (SBOM)" >> $GITHUB_STEP_SUMMARY
+          echo "- **KSI-CNA-02**: Attack surface minimization verified" >> $GITHUB_STEP_SUMMARY

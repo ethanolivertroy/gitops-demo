@@ -1,0 +1,100 @@
+# Example: FedRAMP 20x Compliant Deployment
+# This deployment passes all Kyverno policies
+#
+# Use: kubectl apply -f examples/compliant-deployment.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: example-compliant
+  labels:
+    app.kubernetes.io/name: example
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compliant-app
+  namespace: example-compliant
+  labels:
+    app.kubernetes.io/name: compliant-app
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: manual
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: compliant-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: compliant-app
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/managed-by: manual
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          # Using allowed registry with specific version
+          image: gcr.io/google-samples/hello-app:1.0
+          ports:
+            - containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: compliant-app
+  namespace: example-compliant
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: compliant-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP

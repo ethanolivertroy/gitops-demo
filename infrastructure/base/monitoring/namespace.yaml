@@ -1,0 +1,11 @@
+# Monitoring Namespace
+# Aligns with: KSI-MLA-01 (Operate SIEM for centralized logging)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/managed-by: flux
+    # Exempt from some policies for system components
+    pod-security.kubernetes.io/enforce: privileged

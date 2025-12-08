@@ -1,0 +1,41 @@
+# CODEOWNERS - FedRAMP 20x KSI-CMT-04 Implementation
+# Defines required reviewers for change management procedures
+#
+# This file implements: KSI-CMT-04 (Always follow documented change management procedures)
+# All changes require approval from designated owners before merge
+
+# Default owners for everything in the repo
+* @platform-team
+
+# Security policies require security team review
+/policies/kyverno/security/ @security-team @platform-team
+/policies/kyverno/supply-chain/ @security-team @platform-team
+
+# Infrastructure changes require infrastructure and security review
+/terraform/ @infrastructure-team @security-team
+/infrastructure/ @infrastructure-team @platform-team
+
+# Cluster configurations require platform team review
+/clusters/ @platform-team @security-team
+
+# Network policies require both security and network team review
+/policies/kyverno/networking/ @security-team @network-team
+/infrastructure/base/network-policies/ @security-team @network-team
+
+# Application changes require app team and platform review
+/apps/ @app-team @platform-team
+
+# CI/CD pipeline changes require platform and security review
+/.github/workflows/ @platform-team @security-team
+/.github/CODEOWNERS @security-team
+
+# Documentation changes
+/docs/ @platform-team
+*.md @platform-team
+
+# Compliance documentation requires security sign-off
+/FEDRAMP-KSI-MAPPING.md @security-team @compliance-team
+/docs/ksi-alignment/ @security-team @compliance-team
+
+# Bootstrap and setup scripts require careful review
+/scripts/ @platform-team @security-team

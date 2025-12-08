@@ -1,0 +1,58 @@
+# Secure Demo Application Network Policy
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-01: Restrict inbound/outbound network traffic
+# - KSI-CNA-03: Use logical networking to enforce traffic controls
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: secure-demo-app
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: secure-demo-app
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/managed-by: flux
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: secure-demo-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress from the ingress controller namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Allow ingress from same namespace (for service discovery)
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow egress to same namespace
+    - to:
+        - podSelector: {}

@@ -1,0 +1,49 @@
+# Require Inventory Labels
+# FedRAMP 20x KSI Alignment:
+# - KSI-PIY-01: Maintain real-time, automated resource inventories
+# - KSI-PIY-02: Document security objectives/requirements per resource
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-inventory-labels
+  annotations:
+    policies.kyverno.io/title: Require Inventory Labels
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod,Deployment,Service
+    policies.kyverno.io/description: >-
+      All resources must have standard labels for inventory management and
+      security classification. This aligns with FedRAMP 20x KSI-PIY-01 and KSI-PIY-02.
+spec:
+  validationFailureAction: Audit  # Start with Audit, move to Enforce
+  background: true
+  rules:
+    - name: require-standard-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+                - Service
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - flux-system
+                - kyverno
+      validate:
+        message: >-
+          Resources must have standard labels for inventory. Required labels:
+          app.kubernetes.io/name, app.kubernetes.io/version, app.kubernetes.io/managed-by.
+          (KSI-PIY-01)
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/name: "?*"
+              app.kubernetes.io/managed-by: "?*"

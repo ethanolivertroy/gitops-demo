@@ -1,0 +1,57 @@
+# Disallow Privileged Containers
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-02: Minimize attack surface and lateral movement potential
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-containers
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/category: Pod Security Standards (Baseline)
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    kyverno.io/kyverno-version: 1.10.0
+    kyverno.io/kubernetes-version: "1.26-1.29"
+    policies.kyverno.io/description: >-
+      Privileged mode disables most security mechanisms and must not be allowed.
+      This policy ensures that the `privileged` field is set to `false`.
+      Aligns with FedRAMP 20x KSI-CNA-02: Minimize attack surface.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: privileged-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: >-
+          Privileged mode is disallowed. The field spec.containers[*].securityContext.privileged
+          must be set to `false`. (KSI-CNA-02)
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  privileged: "false"
+    - name: privileged-init-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.initContainers[] || `[]` | length(@) }}"
+            operator: GreaterThanOrEquals
+            value: 1
+      validate:
+        message: >-
+          Privileged mode is disallowed for init containers. (KSI-CNA-02)
+        pattern:
+          spec:
+            initContainers:
+              - securityContext:
+                  privileged: "false"

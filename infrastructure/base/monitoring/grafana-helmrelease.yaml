@@ -1,0 +1,170 @@
+# Grafana - Visualization and Dashboards
+# Aligns with: KSI-MLA-01 (Operate SIEM for centralized logging)
+#              KSI-AFR-09 (Persistently validate security decisions)
+apiVersion: helm.toolkit.fluxcd.io/v2beta2
+kind: HelmRelease
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: grafana
+      version: "7.x"
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: monitoring
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    replicas: 1
+
+    # Admin credentials from secret
+    admin:
+      existingSecret: grafana-admin-credentials
+      userKey: admin-user
+      passwordKey: admin-password
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Security context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 472
+      runAsGroup: 472
+      fsGroup: 472
+
+    # Persistence
+    persistence:
+      enabled: true
+      size: 5Gi
+
+    # Data sources
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+            access: proxy
+            isDefault: true
+          - name: Loki
+            type: loki
+            url: http://loki-gateway.monitoring.svc.cluster.local
+            access: proxy
+          - name: Alertmanager
+            type: alertmanager
+            url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+            access: proxy
+
+    # Dashboard providers
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: default
+            orgId: 1
+            folder: ''
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/default
+          - name: flux
+            orgId: 1
+            folder: 'Flux'
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/flux
+          - name: security
+            orgId: 1
+            folder: 'Security & Compliance'
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/security
+
+    # Pre-configured dashboards
+    dashboards:
+      default:
+        kubernetes-cluster:
+          gnetId: 7249
+          revision: 1
+          datasource: Prometheus
+        kubernetes-pods:
+          gnetId: 6336
+          revision: 1
+          datasource: Prometheus
+        node-exporter:
+          gnetId: 1860
+          revision: 33
+          datasource: Prometheus
+      flux:
+        flux-cluster:
+          url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/main/monitoring/configs/dashboards/cluster.json
+          datasource: Prometheus
+        flux-control-plane:
+          url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/main/monitoring/configs/dashboards/control-plane.json
+          datasource: Prometheus
+
+    # Grafana configuration
+    grafana.ini:
+      server:
+        root_url: "%(protocol)s://%(domain)s/"
+      security:
+        admin_user: admin
+        disable_gravatar: true
+      users:
+        allow_sign_up: false
+        auto_assign_org: true
+        auto_assign_org_role: Viewer
+      auth:
+        disable_login_form: false
+      analytics:
+        reporting_enabled: false
+        check_for_updates: false
+
+    # Service monitor for Prometheus
+    serviceMonitor:
+      enabled: true
+
+    # Sidecar for dashboard/datasource discovery
+    sidecar:
+      dashboards:
+        enabled: true
+        searchNamespace: ALL
+        label: grafana_dashboard
+        folderAnnotation: grafana_folder
+        provider:
+          foldersFromFilesStructure: true
+      datasources:
+        enabled: true
+        searchNamespace: ALL
+        label: grafana_datasource
+---
+# NOTE: Grafana admin credentials must be created separately before deployment.
+# Create the secret with:
+#
+#   kubectl create secret generic grafana-admin-credentials \
+#     --namespace monitoring \
+#     --from-literal=admin-user=admin \
+#     --from-literal=admin-password="$(openssl rand -base64 24)"
+#
+# Or use External Secrets Operator / Sealed Secrets for production.

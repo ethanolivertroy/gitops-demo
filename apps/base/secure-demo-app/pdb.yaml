@@ -1,0 +1,18 @@
+# Pod Disruption Budget
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-06: Design for high availability and rapid recovery
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: secure-demo-app
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: secure-demo-app
+    app.kubernetes.io/component: pdb
+    app.kubernetes.io/managed-by: flux
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: secure-demo-app

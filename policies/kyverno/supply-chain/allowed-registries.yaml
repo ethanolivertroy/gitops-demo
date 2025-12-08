@@ -1,0 +1,41 @@
+# Restrict Container Registries
+# FedRAMP 20x KSI Alignment:
+# - KSI-PIY-07: Document software supply chain risk decisions
+# - KSI-TPR-03: Identify and prioritize supply chain risk mitigation
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Container images may only be pulled from approved registries. This
+      prevents deployment of images from untrusted sources and ensures
+      supply chain control.
+      Aligns with FedRAMP 20x KSI-PIY-07 and KSI-TPR-03.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: >-
+          Images may only be pulled from approved registries. Allowed registries:
+          us-docker.pkg.dev, gcr.io, ghcr.io. (KSI-PIY-07, KSI-TPR-03)
+        pattern:
+          spec:
+            containers:
+              - image: "us-docker.pkg.dev/* | gcr.io/* | ghcr.io/*"
+            =(initContainers):
+              - image: "us-docker.pkg.dev/* | gcr.io/* | ghcr.io/*"
+            =(ephemeralContainers):
+              - image: "us-docker.pkg.dev/* | gcr.io/* | ghcr.io/*"

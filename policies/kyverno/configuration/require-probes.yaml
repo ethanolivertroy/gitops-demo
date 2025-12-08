@@ -1,0 +1,44 @@
+# Require Health Probes
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-06: Design for high availability and rapid recovery
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes
+  annotations:
+    policies.kyverno.io/title: Require Liveness and Readiness Probes
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Liveness and readiness probes are required for all containers to ensure
+      proper health checking and availability management.
+      Aligns with FedRAMP 20x KSI-CNA-06: Design for high availability.
+spec:
+  validationFailureAction: Audit  # Start with Audit, move to Enforce
+  background: true
+  rules:
+    - name: validate-probes
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - flux-system
+      validate:
+        message: >-
+          Containers must have liveness and readiness probes defined for high availability.
+          (KSI-CNA-06)
+        pattern:
+          spec:
+            containers:
+              - livenessProbe:
+                  "?*": "?*"
+                readinessProbe:
+                  "?*": "?*"

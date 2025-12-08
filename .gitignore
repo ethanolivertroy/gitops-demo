@@ -1,0 +1,50 @@
+# Terraform
+terraform/.terraform/
+terraform/**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Secrets and sensitive files
+*.pem
+*.key
+*secret*
+.env
+.env.*
+credentials.json
+service-account*.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Flux
+# Don't ignore flux-system as it contains important manifests
+# But ignore local flux state
+.flux/
+
+# Test outputs
+test-results/
+coverage/
+*.log
+
+# Build artifacts
+bin/
+dist/

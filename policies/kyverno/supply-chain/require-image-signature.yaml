@@ -1,0 +1,59 @@
+# Require Image Signatures (Cosign)
+# FedRAMP 20x KSI Alignment:
+# - KSI-SVC-05: Use cryptographic methods to validate resource integrity
+# - KSI-PIY-07: Document software supply chain risk decisions
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      All container images must be signed using Cosign and verified before
+      deployment. This ensures supply chain integrity and prevents deployment
+      of tampered images.
+      Aligns with FedRAMP 20x KSI-SVC-05 and KSI-PIY-07.
+spec:
+  validationFailureAction: Audit  # Start with Audit, move to Enforce
+  webhookTimeoutSeconds: 30
+  background: false
+  rules:
+    - name: verify-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - flux-system
+                - kyverno
+      verifyImages:
+        - imageReferences:
+            # Add your registry patterns here
+            - "us-docker.pkg.dev/*"
+            - "gcr.io/*"
+            # Example: - "us-docker.pkg.dev/PROJECT_ID/*"
+          attestors:
+            - count: 1
+              entries:
+                # Keyless signing with Workload Identity
+                - keyless:
+                    subject: "*@*.iam.gserviceaccount.com"
+                    issuer: "https://accounts.google.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+                # Alternative: Key-based signing
+                # - keys:
+                #     publicKeys: |-
+                #       -----BEGIN PUBLIC KEY-----
+                #       ...
+                #       -----END PUBLIC KEY-----

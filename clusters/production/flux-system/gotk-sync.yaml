@@ -1,0 +1,40 @@
+# FedRAMP 20x KSI Alignment:
+# - KSI-CMT-01: All changes tracked via Git commits
+# - KSI-CMT-02: Deployments via immutable Git references
+# - KSI-SVC-04: Automated configuration management
+# - KSI-SVC-05: Cryptographic integrity validation (commit signatures)
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  ref:
+    branch: main
+  secretRef:
+    name: flux-system
+  # TODO: Replace <YOUR_GITHUB_ORG> with your GitHub organization or username
+  url: ssh://git@github.com/<YOUR_GITHUB_ORG>/gitops-demo
+  # Production MUST have commit signature verification enabled
+  # KSI-SVC-05: Use cryptographic methods to validate resource integrity
+  verify:
+    provider: cosign
+    secretRef:
+      name: cosign-pub-key
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 10m0s
+  path: ./clusters/production
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  wait: true
+  timeout: 5m0s

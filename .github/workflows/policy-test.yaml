@@ -1,0 +1,139 @@
+# Kyverno Policy Testing Pipeline
+# Aligns with: KSI-CMT-03 (Automate testing throughout deployment)
+#              KSI-AFR-09 (Persistently validate security decisions)
+name: Policy Tests
+
+on:
+  pull_request:
+    paths:
+      - 'policies/**'
+      - 'apps/**'
+      - 'infrastructure/**'
+      - '.github/workflows/policy-test.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'policies/**'
+
+env:
+  KYVERNO_VERSION: "1.11.0"
+
+jobs:
+  policy-tests:
+    name: Kyverno Policy Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Kyverno CLI
+        run: |
+          curl -sLO "https://github.com/kyverno/kyverno/releases/download/v${KYVERNO_VERSION}/kyverno-cli_v${KYVERNO_VERSION}_linux_x86_64.tar.gz"
+          tar -xzf kyverno-cli_v${KYVERNO_VERSION}_linux_x86_64.tar.gz
+          sudo mv kyverno /usr/local/bin/
+          kyverno version
+
+      - name: Run policy tests
+        run: |
+          echo "Running Kyverno policy tests..."
+
+          # Run tests if test files exist
+          if [ -d "policies/tests" ]; then
+            kyverno test policies/tests/
+          else
+            echo "No policy tests found in policies/tests/"
+          fi
+
+      - name: Validate security policies
+        run: |
+          echo "=== Security Policy Validation ==="
+
+          # Test each security policy category
+          for policy_dir in policies/kyverno/*/; do
+            category=$(basename "$policy_dir")
+            echo ""
+            echo "--- Category: $category ---"
+
+            for policy in "$policy_dir"*.yaml; do
+              if [ -f "$policy" ]; then
+                policy_name=$(basename "$policy")
+                echo "Validating: $policy_name"
+                kyverno validate "$policy"
+              fi
+            done
+          done
+
+      - name: Test against sample app
+        run: |
+          echo "=== Testing Sample App Against Policies ==="
+
+          # Build sample app manifests
+          kustomize build apps/base/secure-demo-app > /tmp/sample-app.yaml
+
+          # Apply all policies
+          echo "Applying policies to sample app..."
+          kyverno apply policies/kyverno/ \
+            --resource /tmp/sample-app.yaml \
+            --detailed-results
+
+      - name: Generate policy report
+        run: |
+          echo "=== Policy Coverage Report ==="
+
+          # Count policies by category
+          echo ""
+          echo "Policy counts by category:"
+          for category in policies/kyverno/*/; do
+            category_name=$(basename "$category")
+            count=$(find "$category" -name '*.yaml' | wc -l)
+            echo "  $category_name: $count policies"
+          done
+
+          # List all policies
+          echo ""
+          echo "All policies:"
+          find policies/kyverno -name '*.yaml' -exec basename {} \; | sort
+
+  policy-documentation:
+    name: Policy Documentation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check policy annotations
+        run: |
+          echo "Checking policy annotations..."
+
+          # Check each policy has required annotations
+          for policy in $(find policies/kyverno -name '*.yaml'); do
+            policy_name=$(basename "$policy")
+
+            # Check for description annotation
+            if ! grep -q "policies.kyverno.io/description" "$policy"; then
+              echo "WARNING: $policy_name missing description annotation"
+            fi
+
+            # Check for category annotation
+            if ! grep -q "policies.kyverno.io/category" "$policy"; then
+              echo "WARNING: $policy_name missing category annotation"
+            fi
+          done
+
+          echo "Annotation check complete"
+
+      - name: Verify KSI mappings
+        run: |
+          echo "Verifying KSI references in policies..."
+
+          # Check that policies reference KSI in message or annotation
+          policies_without_ksi=0
+          for policy in $(find policies/kyverno -name '*.yaml'); do
+            if ! grep -qi "KSI-" "$policy"; then
+              echo "NOTE: $(basename "$policy") has no KSI reference"
+              policies_without_ksi=$((policies_without_ksi + 1))
+            fi
+          done
+
+          echo ""
+          echo "Policies without KSI reference: $policies_without_ksi"

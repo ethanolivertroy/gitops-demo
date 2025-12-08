@@ -1,0 +1,106 @@
+# Kyverno Helm Release
+# FedRAMP 20x KSI Alignment:
+# - KSI-AFR-09: Persistently validate security decisions and policies
+# - KSI-SVC-04: Automate machine resource configuration management
+# - KSI-MLA-05: Evaluate Infrastructure as Code and configurations
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kyverno
+  namespace: kyverno
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: kyverno
+      version: "3.x"  # Use latest 3.x version
+      sourceRef:
+        kind: HelmRepository
+        name: kyverno
+        namespace: flux-system
+      interval: 24h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    # High availability configuration (KSI-CNA-06)
+    replicaCount: 3
+
+    # Admission controller configuration
+    admissionController:
+      replicas: 3
+      resources:
+        limits:
+          memory: 384Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+      # Security context (KSI-CNA-02)
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
+    # Background controller for policy reports
+    backgroundController:
+      replicas: 2
+      resources:
+        limits:
+          memory: 128Mi
+        requests:
+          cpu: 100m
+          memory: 64Mi
+
+    # Reports controller
+    reportsController:
+      replicas: 2
+      resources:
+        limits:
+          memory: 128Mi
+        requests:
+          cpu: 100m
+          memory: 64Mi
+
+    # Cleanup controller
+    cleanupController:
+      replicas: 2
+
+    # Features configuration
+    features:
+      # Enable policy exception support
+      policyExceptions:
+        enabled: true
+        namespace: kyverno
+
+      # Background scan for policy reports (KSI-AFR-09)
+      backgroundScan:
+        enabled: true
+        backgroundScanInterval: 1h
+
+      # Generate validating admission policies
+      generateValidatingAdmissionPolicy:
+        enabled: false  # Enable when moving to K8s 1.30+
+
+    # Webhook configuration
+    config:
+      # Exclude kube-system and flux-system from policies
+      webhooks:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: NotIn
+                values:
+                  - kube-system
+                  - kube-public
+                  - kube-node-lease
+
+    # Metrics for monitoring (KSI-MLA-01)
+    metricsConfig:
+      metricsExposure:
+        enabled: true

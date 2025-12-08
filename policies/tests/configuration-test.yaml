@@ -1,0 +1,139 @@
+# Kyverno Policy Test Suite
+# Tests for configuration policies (KSI-PIY-01, KSI-CNA-06)
+name: configuration-policies-test
+policies:
+  - ../kyverno/configuration/require-labels.yaml
+  - ../kyverno/configuration/require-probes.yaml
+  - ../kyverno/configuration/require-resource-limits.yaml
+resources:
+  - name: labeled-deployment
+    values:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: labeled-app
+        namespace: test
+        labels:
+          app.kubernetes.io/name: my-app
+          app.kubernetes.io/version: "1.0.0"
+          app.kubernetes.io/managed-by: flux
+      spec:
+        selector:
+          matchLabels:
+            app: my-app
+        template:
+          metadata:
+            labels:
+              app: my-app
+              app.kubernetes.io/name: my-app
+              app.kubernetes.io/version: "1.0.0"
+              app.kubernetes.io/managed-by: flux
+          spec:
+            containers:
+              - name: app
+                image: nginx:1.25
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                  limits:
+                    cpu: 200m
+                    memory: 256Mi
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8080
+                readinessProbe:
+                  httpGet:
+                    path: /ready
+                    port: 8080
+  - name: unlabeled-deployment
+    values:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: unlabeled-app
+        namespace: test
+      spec:
+        selector:
+          matchLabels:
+            app: my-app
+        template:
+          metadata:
+            labels:
+              app: my-app
+          spec:
+            containers:
+              - name: app
+                image: nginx:1.25
+  - name: no-probes-deployment
+    values:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: no-probes-app
+        namespace: test
+        labels:
+          app.kubernetes.io/name: my-app
+          app.kubernetes.io/version: "1.0.0"
+          app.kubernetes.io/managed-by: flux
+      spec:
+        selector:
+          matchLabels:
+            app: my-app
+        template:
+          metadata:
+            labels:
+              app: my-app
+              app.kubernetes.io/name: my-app
+              app.kubernetes.io/version: "1.0.0"
+              app.kubernetes.io/managed-by: flux
+          spec:
+            containers:
+              - name: app
+                image: nginx:1.25
+  - name: no-limits-deployment
+    values:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: no-limits-app
+        namespace: test
+        labels:
+          app.kubernetes.io/name: my-app
+          app.kubernetes.io/version: "1.0.0"
+          app.kubernetes.io/managed-by: flux
+      spec:
+        selector:
+          matchLabels:
+            app: my-app
+        template:
+          metadata:
+            labels:
+              app: my-app
+              app.kubernetes.io/name: my-app
+              app.kubernetes.io/version: "1.0.0"
+              app.kubernetes.io/managed-by: flux
+          spec:
+            containers:
+              - name: app
+                image: nginx:1.25
+results:
+  - policy: require-labels
+    resource: labeled-deployment
+    result: pass
+  - policy: require-labels
+    resource: unlabeled-deployment
+    result: fail
+  - policy: require-probes
+    resource: labeled-deployment
+    result: pass
+  - policy: require-probes
+    resource: no-probes-deployment
+    result: fail
+  - policy: require-resource-limits
+    resource: labeled-deployment
+    result: pass
+  - policy: require-resource-limits
+    resource: no-limits-deployment
+    result: fail

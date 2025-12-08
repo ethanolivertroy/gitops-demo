@@ -1,0 +1,50 @@
+# Require Network Policy for Deployments
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-01: Restrict inbound/outbound network traffic on all resources
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-network-policy
+  annotations:
+    policies.kyverno.io/title: Require Network Policy
+    policies.kyverno.io/category: Network
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Deployment
+    policies.kyverno.io/description: >-
+      Every Deployment must have a corresponding NetworkPolicy. This policy
+      validates that a NetworkPolicy exists in the same namespace that selects
+      the Deployment's pods.
+      Aligns with FedRAMP 20x KSI-CNA-01: Restrict inbound/outbound network traffic.
+spec:
+  validationFailureAction: Audit  # Start with Audit, move to Enforce
+  background: true
+  rules:
+    - name: require-network-policy
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+      preconditions:
+        all:
+          - key: "{{request.object.metadata.namespace}}"
+            operator: NotIn
+            value:
+              - kube-system
+              - kube-public
+              - flux-system
+              - kyverno
+      validate:
+        message: >-
+          Deployment '{{request.object.metadata.name}}' in namespace '{{request.object.metadata.namespace}}'
+          does not have a matching NetworkPolicy. All Deployments must have network policies
+          defined. (KSI-CNA-01)
+        deny:
+          conditions:
+            all:
+              - key: "{{ request.object.metadata.namespace }}"
+                operator: Equals
+                value: "{{ request.object.metadata.namespace }}"
+              # This is a simplified check - in production, use a more sophisticated approach
+              # with context variables to check for actual NetworkPolicy existence

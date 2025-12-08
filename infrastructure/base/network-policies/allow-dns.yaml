@@ -1,0 +1,30 @@
+# Allow DNS Egress Network Policy
+# FedRAMP 20x KSI Alignment:
+# - KSI-CNA-01: Restrict traffic while allowing necessary services
+#
+# This policy allows DNS resolution which is required for all workloads.
+# It should be applied to namespaces that need DNS access.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: default
+  labels:
+    app.kubernetes.io/name: allow-dns
+    app.kubernetes.io/component: network-security
+    fedramp.gov/ksi: CNA-01
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

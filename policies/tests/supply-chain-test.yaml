@@ -1,0 +1,78 @@
+# Kyverno Policy Test Suite
+# Tests for supply chain policies (KSI-PIY-07, KSI-CNA-04)
+name: supply-chain-policies-test
+policies:
+  - ../kyverno/supply-chain/disallow-latest-tag.yaml
+  - ../kyverno/supply-chain/allowed-registries.yaml
+resources:
+  - name: tagged-image-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: tagged-pod
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: gcr.io/my-project/app:v1.2.3
+  - name: latest-tag-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: latest-pod
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: nginx:latest
+  - name: no-tag-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: no-tag-pod
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: nginx
+  - name: allowed-registry-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: allowed-registry
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: gcr.io/project/app:v1.0
+  - name: disallowed-registry-pod
+    values:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: disallowed-registry
+        namespace: test
+      spec:
+        containers:
+          - name: app
+            image: docker.io/random/app:v1.0
+results:
+  - policy: disallow-latest-tag
+    resource: tagged-image-pod
+    result: pass
+  - policy: disallow-latest-tag
+    resource: latest-tag-pod
+    result: fail
+  - policy: disallow-latest-tag
+    resource: no-tag-pod
+    result: fail
+  - policy: restrict-image-registries
+    resource: allowed-registry-pod
+    result: pass
+  - policy: restrict-image-registries
+    resource: disallowed-registry-pod
+    result: fail

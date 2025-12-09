@@ -90,11 +90,20 @@ jobs:
           working_directory: terraform/
           soft_fail: true
 
-      - name: Run Terrascan
+      - name: Run Terrascan - GKE
         uses: tenable/terrascan-action@main
         with:
           iac_type: 'terraform'
-          iac_dir: 'terraform/'
+          iac_dir: 'terraform/gke'
+          policy_type: 'gcp'
+          verbose: true
+        continue-on-error: true
+
+      - name: Run Terrascan - Security
+        uses: tenable/terrascan-action@main
+        with:
+          iac_type: 'terraform'
+          iac_dir: 'terraform/security'
           policy_type: 'gcp'
           verbose: true
         continue-on-error: true
